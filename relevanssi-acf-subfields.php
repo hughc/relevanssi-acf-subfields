@@ -106,31 +106,59 @@ class Relevanssi_ACF_Subfields {
 
 		$custom_fields = relevanssi_get_custom_fields();
 		foreach ( $custom_fields as $custom_field ) {
-			if ( false === strpos( $custom_field, '%' ) )
-				continue;
+            $firstPos = strpos( $custom_field, '%' );
+			if ( false === $firstPos )
+                continue;
 
-			preg_match( '/([a-z0-9\_]+)_\%_([a-z0-9\_]+)/i', $custom_field, $matches );
-			$field_name = $matches[ 1 ];
-			$subfield_name = $matches[ 2 ];
-			$num_fields = get_post_meta( $post->ID, $field_name, true );
+            $secondPos = strpos( $custom_field, '%', $firstPos+1);
+			if ( false === $secondPos ) {
+                preg_match( '/([a-z0-9\_]+)_\%_([a-z0-9\_]+)/i', $custom_field, $matches );
+                $field_name = $matches[ 1 ];
+                $subfield_name = $matches[ 2 ];
+            } else {
+                preg_match( '/([a-z0-9\_]+)_\%_([a-z0-9\_]+)_\%_([a-z0-9\_]+)/i', $custom_field, $matches );
+                $field_name = $matches[ 1 ];
+                $subfield_name = $matches[ 2 ];
+                $sub_sub_field_name = $matches[ 3 ];
+                error_log("breakdown: $field_name, $subfield_name, $sub_sub_field_name");
+            }
+            $num_fields = get_post_meta( $post->ID, $field_name, true );
 			for ( $i = 0; $i < $num_fields; $i++ ) {
-				$raw = get_post_meta( $post->ID, "{$field_name}_{$i}_{$subfield_name}", true );
-				// Copied and pasted from Relevanssi
-				remove_shortcode('noindex');
-				add_shortcode('noindex', 'relevanssi_noindex_shortcode_indexing');
-				$disable_shortcodes = get_option('relevanssi_disable_shortcodes');
-				$shortcodes = explode(',', $disable_shortcodes);
-				foreach ($shortcodes as $shortcode) {
-					remove_shortcode(trim($shortcode));
-				}
-				remove_shortcode('contact-form');		// Jetpack Contact Form causes an error message
-				remove_shortcode('starrater');			// GD Star Rating rater shortcode causes problems
-				$value = do_shortcode( $raw ) . PHP_EOL;
-				$content .= $value;
+                $raw = get_post_meta( $post->ID, "{$field_name}_{$i}_{$subfield_name}", true );
+                if (is_array($raw)) {
+                    // subsubfield is kicking
+                    foreach ($raw as $sub_sub_index => $sub_value) {
+                    $sub_field_id = "{$field_name}_{$i}_{$subfield_name}_{$sub_sub_index}_{$sub_sub_field_name}";
+                    $raw = get_post_meta( $post->ID, $sub_field_id, true );
+                    error_log("sub sub: $sub_field_id, $raw");
+                    
+                    $content .= $this->process_content($raw);
+                    }
+
+                } else {
+                    $content .= $this->process_content($raw);
+                }
 			}
 		}
 		return $content;
-	}
+    }
+    
+    public function process_content($raw) {
+        
+        // Copied and pasted from Relevanssi
+
+        remove_shortcode('noindex');
+        add_shortcode('noindex', 'relevanssi_noindex_shortcode_indexing');
+        $disable_shortcodes = get_option('relevanssi_disable_shortcodes');
+        $shortcodes = explode(',', $disable_shortcodes);
+        foreach ($shortcodes as $shortcode) {
+            remove_shortcode(trim($shortcode));
+        }
+        remove_shortcode('contact-form');		// Jetpack Contact Form causes an error message
+        remove_shortcode('starrater');			// GD Star Rating rater shortcode causes problems
+        $value = do_shortcode( $raw ) . PHP_EOL;
+        return $value;
+    }
 
 }
 
